@@ -1,13 +1,19 @@
-#![warn(clippy::cognitive_complexity, clippy::unseparated_literal_suffix)]
+#![warn(
+    clippy::cognitive_complexity,
+    clippy::unseparated_literal_suffix,
+    clippy::unreadable_literal,
+    clippy::wildcard_imports,
+    clippy::large_digit_groups
+)]
 use macroquad::prelude::*;
 use macroquad::ui::root_ui;
-use macroquad_particles::{AtlasConfig, BlendMode, Emitter, EmitterConfig};
 const SHIP_HEIGHT: f32 = 25.;
 const SHIP_BASE: f32 = 22.;
 
 #[derive(Default)]
 struct Game {
     ship: Ship,
+    enemy: Ship,
     bullets: Vec<Bullet>,
     asteroids: Vec<Asteroid>,
     game_over: bool,
@@ -17,18 +23,23 @@ impl Game {
     fn new(asteroid_count: usize) -> Self {
         let screen_center =
             Vec2::new(screen_width() / 2., screen_height() / 2.);
-        let mut game = Self {
+        Self {
             ship: Ship {
                 pos: screen_center,
+                color: WHITE,
                 ..Default::default()
             },
+            enemy: Ship {
+                pos: Vec2::new(
+                    screen_width() * 3. / 4.,
+                    screen_height() * 3. / 4.,
+                ),
+                color: RED,
+                ..Default::default()
+            },
+            asteroids: (0..asteroid_count).map(|_| Asteroid::rand()).collect(),
             ..Default::default()
-        };
-
-        for _ in 0..asteroid_count {
-            game.asteroids.push(Asteroid::rand())
         }
-        game
     }
 }
 
@@ -38,6 +49,88 @@ struct Ship {
     rot: f32,
     vel: Vec2,
     last_shot: f64,
+    color: Color,
+}
+
+impl Ship {
+    fn update(&mut self, control: ShipControl, bullets: &mut Vec<Bullet>) {
+        let frame_t = get_time();
+        let mut acc = self.vel / 1000.; // Friction
+        let rotation = self.rot.to_radians();
+
+        if control.thrust_forward {
+            acc += Vec2::new(rotation.sin(), -rotation.cos()) / 5.;
+        }
+        if control.thrust_aft {
+            acc -= Vec2::new(rotation.sin(), -rotation.cos()) / 12.;
+        }
+        if control.thrust_left {
+            acc -= Vec2::new(rotation.cos(), rotation.sin()) / 20.;
+        }
+        if control.thrust_right {
+            acc += Vec2::new(rotation.cos(), rotation.sin()) / 20.;
+        }
+        if control.rotate_right {
+            self.rot += 5.;
+        }
+        if control.rotate_left {
+            self.rot -= 5.;
+        }
+
+        // Shot
+        if control.fire && frame_t - self.last_shot > 0.1 {
+            let rot_vec = Vec2::new(rotation.sin(), -rotation.cos());
+            bullets.push(Bullet {
+                pos: self.pos + rot_vec * SHIP_HEIGHT / 2.,
+                vel: (rot_vec * 7.) + self.vel,
+                shot_at: frame_t,
+                collided: false,
+            });
+            // Recoil
+            acc -= Vec2::new(rotation.sin(), -rotation.cos()) / 10.;
+            self.last_shot = frame_t;
+        }
+
+        // Euler integration
+        self.vel += acc;
+        self.pos += self.vel;
+        self.pos = wrap_around(&self.pos);
+    }
+
+    fn draw(&self) {
+        let rotation = self.rot.to_radians();
+
+        let v1 = Vec2::new(
+            self.pos.x + rotation.sin() * SHIP_HEIGHT / 2.,
+            self.pos.y - rotation.cos() * SHIP_HEIGHT / 2.,
+        );
+        let v2 = Vec2::new(
+            self.pos.x
+                - rotation.cos() * SHIP_BASE / 2.
+                - rotation.sin() * SHIP_HEIGHT / 2.,
+            self.pos.y - rotation.sin() * SHIP_BASE / 2.
+                + rotation.cos() * SHIP_HEIGHT / 2.,
+        );
+        let v3 = Vec2::new(
+            self.pos.x + rotation.cos() * SHIP_BASE / 2.
+                - rotation.sin() * SHIP_HEIGHT / 2.,
+            self.pos.y
+                + rotation.sin() * SHIP_BASE / 2.
+                + rotation.cos() * SHIP_HEIGHT / 2.,
+        );
+        draw_triangle_lines(v1, v2, v3, 2., self.color);
+    }
+}
+
+#[derive(Default)]
+struct ShipControl {
+    thrust_forward: bool,
+    thrust_aft: bool,
+    thrust_left: bool,
+    thrust_right: bool,
+    rotate_left: bool,
+    rotate_right: bool,
+    fire: bool,
 }
 
 #[derive(Default)]
@@ -72,27 +165,9 @@ impl Asteroid {
             rot: 0.,
             rot_speed: rand::gen_range(-2., 2.),
             size: screen_width().min(screen_height()) / 10.,
-            sides: rand::gen_range(4, 8),
+            sides: rand::gen_range(6, 12),
             collided: false,
         }
-    }
-}
-
-fn explosion() -> EmitterConfig {
-    EmitterConfig {
-        one_shot: true,
-        emitting: false,
-        lifetime: 0.3,
-        lifetime_randomness: 0.7,
-        explosiveness: 0.95,
-        amount: 30,
-        initial_direction_spread: 2.0 * std::f32::consts::PI,
-        initial_velocity: 200.0,
-        size: 30.0,
-        gravity: vec2(0.0, -1000.0),
-        atlas: Some(AtlasConfig::new(4, 4, 8..)),
-        blend_mode: BlendMode::Additive,
-        ..Default::default()
     }
 }
 
@@ -115,13 +190,7 @@ fn wrap_around(v: &Vec2) -> Vec2 {
 
 #[macroquad::main("Asteroids")]
 async fn main() {
-    let texture = load_texture("assets/smoke_fire.png").await.unwrap();
-    let mut game = Game::new(5);
-
-    let mut one_shot_emitter = Emitter::new(EmitterConfig {
-        texture: Some(texture),
-        ..explosion()
-    });
+    let mut game = Game::new(0);
 
     loop {
         clear_background(BLACK);
@@ -131,52 +200,38 @@ async fn main() {
             game = wait_for_new_game(win).await;
         }
         let frame_t = get_time();
-        let rotation = game.ship.rot.to_radians();
 
-        let mut acc = -game.ship.vel / 1000.; // Friction
+        let ship_control = ShipControl {
+            thrust_forward: is_key_down(KeyCode::D) || is_key_down(KeyCode::Up),
+            thrust_aft: is_key_down(KeyCode::E) || is_key_down(KeyCode::Down),
+            thrust_left: is_key_down(KeyCode::F),
+            thrust_right: is_key_down(KeyCode::S),
+            rotate_left: is_key_down(KeyCode::Left),
+            rotate_right: is_key_down(KeyCode::Right),
+            fire: is_key_down(KeyCode::Space),
+        };
+        game.ship.update(ship_control, &mut game.bullets);
 
-        // Forward
-        if is_key_down(KeyCode::D) || is_key_down(KeyCode::Up) {
-            acc += Vec2::new(rotation.sin(), -rotation.cos()) / 5.;
-        }
-        // Back
-        if is_key_down(KeyCode::E) || is_key_down(KeyCode::Down) {
-            acc -= Vec2::new(rotation.sin(), -rotation.cos()) / 12.;
-        }
-        // Left
-        if is_key_down(KeyCode::F) {
-            acc -= Vec2::new(rotation.cos(), rotation.sin()) / 20.;
-        }
-        // Right
-        if is_key_down(KeyCode::S) {
-            acc += Vec2::new(rotation.cos(), rotation.sin()) / 20.;
-        }
+        let enemy_angle = game.enemy.rot.to_radians();
+        let enemy_dir = Vec2::from_angle(enemy_angle);
+        let to_ship = game.enemy.pos - game.ship.pos;
+        let target_angle_rad = enemy_dir.angle_between(to_ship);
+        let degrees = target_angle_rad.to_degrees() + 90.;
+        dbg!(degrees);
+        let modulo = degrees.rem_euclid(360.);
+        let centered = modulo - 180.0;
+        dbg!(centered);
 
-        // Shot
-        if is_key_down(KeyCode::Space) && frame_t - game.ship.last_shot > 0.1 {
-            let rot_vec = Vec2::new(rotation.sin(), -rotation.cos());
-            game.bullets.push(Bullet {
-                pos: game.ship.pos + rot_vec * SHIP_HEIGHT / 2.,
-                vel: (rot_vec * 7.) + game.ship.vel,
-                shot_at: frame_t,
-                collided: false,
-            });
-            // Recoil
-            acc -= Vec2::new(rotation.sin(), -rotation.cos()) / 10.;
-            game.ship.last_shot = frame_t;
-        }
-
-        // Steer
-        if is_key_down(KeyCode::Right) {
-            game.ship.rot += 5.;
-        } else if is_key_down(KeyCode::Left) {
-            game.ship.rot -= 5.;
-        }
-
-        // Euler integration
-        game.ship.vel += acc;
-        game.ship.pos += game.ship.vel;
-        game.ship.pos = wrap_around(&game.ship.pos);
+        let enemy_control = ShipControl {
+            rotate_left: centered < 0.,
+            rotate_right: centered > 0.,
+            thrust_forward: centered.abs() < 45.,
+            thrust_aft: centered.abs() > 90.,
+            thrust_left: centered < 0.,
+            thrust_right: centered > 0.,
+            fire: centered.abs() < 5.,
+        };
+        game.enemy.update(enemy_control, &mut game.bullets);
 
         // Move each bullet
         for bullet in game.bullets.iter_mut() {
@@ -200,7 +255,7 @@ async fn main() {
             if (asteroid.pos - game.ship.pos).length()
                 < asteroid.size + SHIP_HEIGHT / 3.
             {
-                game.game_over = true;
+                // game.game_over = true;
                 break;
             }
 
@@ -209,8 +264,6 @@ async fn main() {
                 if (asteroid.pos - bullet.pos).length() < asteroid.size {
                     asteroid.collided = true;
                     bullet.collided = true;
-                    one_shot_emitter.draw(bullet.pos);
-                    one_shot_emitter.config.emitting = true;
 
                     // Break the asteroid
                     if asteroid.sides > 3 {
@@ -275,26 +328,8 @@ async fn main() {
                 WHITE,
             )
         }
-
-        let v1 = Vec2::new(
-            game.ship.pos.x + rotation.sin() * SHIP_HEIGHT / 2.,
-            game.ship.pos.y - rotation.cos() * SHIP_HEIGHT / 2.,
-        );
-        let v2 = Vec2::new(
-            game.ship.pos.x
-                - rotation.cos() * SHIP_BASE / 2.
-                - rotation.sin() * SHIP_HEIGHT / 2.,
-            game.ship.pos.y - rotation.sin() * SHIP_BASE / 2.
-                + rotation.cos() * SHIP_HEIGHT / 2.,
-        );
-        let v3 = Vec2::new(
-            game.ship.pos.x + rotation.cos() * SHIP_BASE / 2.
-                - rotation.sin() * SHIP_HEIGHT / 2.,
-            game.ship.pos.y
-                + rotation.sin() * SHIP_BASE / 2.
-                + rotation.cos() * SHIP_HEIGHT / 2.,
-        );
-        draw_triangle_lines(v1, v2, v3, 2., WHITE);
+        game.ship.draw();
+        game.enemy.draw();
         root_ui().label(None, "hello megaui");
         if root_ui().button(None, "Push me") {
             println!("pushed");
@@ -311,7 +346,7 @@ async fn wait_for_new_game(win: bool) -> Game {
             show_loss();
         }
         if is_key_down(KeyCode::Enter) {
-            return Game::new(5);
+            return Game::new(1);
         }
         next_frame().await;
         continue;
