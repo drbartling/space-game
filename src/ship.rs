@@ -154,7 +154,9 @@ impl Ship {
         }
 
         let predicted_pos = target_pos + rel_vel * t;
-        draw_circle(predicted_pos.x, predicted_pos.y, 3.0, YELLOW);
+        if !cfg!(test) {
+            draw_circle(predicted_pos.x, predicted_pos.y, 3.0, YELLOW);
+        }
         Some(self.angle_to_deg(predicted_pos))
     }
 }

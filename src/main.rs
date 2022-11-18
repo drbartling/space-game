@@ -108,7 +108,6 @@ async fn main() {
             thrust_left: -120. < angle_to_ship && angle_to_ship < 60.,
             thrust_right: 60. < angle_to_ship && angle_to_ship < 120.,
             fire: angle_to_ship.abs() < 5.,
-            ..Default::default()
         };
         game.enemy.update(enemy_control, &mut game.bullets);
 
