@@ -5,7 +5,7 @@ use crate::{
 };
 
 use super::wrap_around;
-use macroquad::{prelude::*, rand::gen_range};
+use macroquad::prelude::*;
 
 pub const SHIP_HEIGHT: f32 = 25.;
 pub const SHIP_BASE: f32 = 22.;
@@ -20,7 +20,6 @@ pub struct Ship {
     pub heat: f32,
     pub overheated: bool,
     pub health: i32,
-    pub time_of_death: Option<f64>,
     pub controller: fn() -> ShipControl,
 }
 
@@ -35,7 +34,6 @@ impl Default for Ship {
             heat: Default::default(),
             overheated: Default::default(),
             health: Default::default(),
-            time_of_death: Default::default(),
             controller: no_control,
         }
     }
@@ -58,7 +56,7 @@ pub fn player_control() -> ShipControl {
 }
 
 impl GameObject for Ship {
-    fn update(&mut self) -> Vec<GameObjects> {
+    fn update(mut self, _objs: &[GameObjects]) -> Vec<GameObjects> {
         self.position += self.vel;
         self.position = wrap_around(&self.position);
 
@@ -68,24 +66,7 @@ impl GameObject for Ship {
         let heading_vector = self.heading_vector();
         let mut new_objects = vec![];
 
-        if let Some(tod) = self.time_of_death {
-            if 2. < frame_t - tod {
-                *self = Ship {
-                    color: self.color,
-                    position: Vec2::new(
-                        gen_range(0., screen_width()),
-                        gen_range(0., screen_height()),
-                    ),
-                    rot: -90.0,
-                    health: 10,
-                    ..Default::default()
-                }
-            }
-            return vec![];
-        }
         if 0 > self.health {
-            self.time_of_death = Some(frame_t);
-            self.position = Vec2::new(screen_width(), screen_height()) * 2.0;
             return vec![];
         }
 
@@ -103,8 +84,8 @@ impl GameObject for Ship {
                 velocity: self.vel - dv * 10.0,
                 color: ORANGE,
                 spawn_time: get_time(),
-                life_time: 1.0,
-                wobble: speed / 2.,
+                life_time: 2.0,
+                wobble: speed,
             };
             new_objects.push(GameObjects::Particle(p));
         };
@@ -160,13 +141,11 @@ impl GameObject for Ship {
 
         self.heat *= 0.985;
         self.vel += acc;
+        new_objects.push(GameObjects::Ship(self));
         new_objects
     }
 
     fn draw(&self) {
-        if self.time_of_death.is_some() {
-            return;
-        }
         let rotation = self.rot.to_radians();
         let heading_vector = Vec2::from_angle(rotation);
 

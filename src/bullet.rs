@@ -1,6 +1,10 @@
 use macroquad::prelude::*;
 
-use crate::{game::GameObject, screen::wrap_around};
+use crate::{
+    game::{GameObject, GameObjects},
+    screen::wrap_around,
+    ship,
+};
 
 pub const SHOT_SPEED: f32 = 7.;
 pub const SHOT_LIFE: f64 = 1.5;
@@ -15,10 +19,23 @@ pub struct Bullet {
 }
 
 impl GameObject for Bullet {
-    fn update(&mut self) -> Vec<crate::game::GameObjects> {
+    fn update(mut self, objs: &[GameObjects]) -> Vec<crate::game::GameObjects> {
         self.pos += self.vel;
         self.pos = wrap_around(&self.pos);
-        vec![]
+        self.collided = objs.iter().any(|o| match o {
+            GameObjects::Ship(s) => {
+                let dp = s.position - self.pos;
+                let dist = dp.length().abs();
+                dist < ship::SHIP_HEIGHT / 2.0
+            }
+            GameObjects::Particle(_) => false,
+            GameObjects::Bullet(_) => false,
+        });
+        if self.is_alive() {
+            vec![GameObjects::Bullet(self)]
+        } else {
+            vec![]
+        }
     }
 
     fn draw(&self) {

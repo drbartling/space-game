@@ -30,10 +30,12 @@ async fn main() {
 
     loop {
         clear_background(BLACK);
-        let mut new_objects: Vec<_> =
-            game.objects.iter_mut().flat_map(|o| o.update()).collect();
-        game.objects.retain(|o| o.is_alive());
-        game.objects.append(&mut new_objects);
+        let mut new_objects = vec![];
+        while !game.objects.is_empty() {
+            let obj = game.objects.pop().expect("objects is not empty");
+            new_objects.append(&mut obj.update(&game.objects));
+        }
+        game.objects = new_objects;
         game.objects.iter().for_each(|o| o.draw());
         next_frame().await
     }

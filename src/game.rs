@@ -2,11 +2,12 @@ use macroquad::prelude::*;
 
 use crate::{
     bullet, particle,
+    screen::center,
     ship::{self, player_control},
 };
 
 pub trait GameObject {
-    fn update(&mut self) -> Vec<GameObjects>;
+    fn update(self, objs: &[GameObjects]) -> Vec<GameObjects>;
     fn draw(&self);
     fn is_alive(&self) -> bool;
 }
@@ -18,18 +19,24 @@ pub struct Game {
 
 impl Game {
     pub fn new() -> Self {
-        let screen_center =
-            Vec2::new(screen_width() / 2., screen_height() / 2.);
-
         let mut objects = vec![];
+
         let player_ship = ship::Ship {
-            position: screen_center,
+            position: center(),
             health: 10,
             color: GREEN,
             controller: player_control,
             ..Default::default()
         };
         objects.push(GameObjects::Ship(player_ship));
+
+        let enemy_ship = ship::Ship {
+            position: center() * 1.5,
+            health: 10,
+            color: RED,
+            ..Default::default()
+        };
+        objects.push(GameObjects::Ship(enemy_ship));
 
         Self { objects }
     }
@@ -42,11 +49,11 @@ pub enum GameObjects {
 }
 
 impl GameObjects {
-    pub fn update(&mut self) -> Vec<GameObjects> {
+    pub fn update(self, objs: &[GameObjects]) -> Vec<GameObjects> {
         match self {
-            GameObjects::Ship(s) => s.update(),
-            GameObjects::Particle(p) => p.update(),
-            GameObjects::Bullet(b) => b.update(),
+            GameObjects::Ship(s) => s.update(objs),
+            GameObjects::Particle(p) => p.update(objs),
+            GameObjects::Bullet(b) => b.update(objs),
         }
     }
     pub fn draw(&self) {
@@ -54,13 +61,6 @@ impl GameObjects {
             GameObjects::Ship(s) => s.draw(),
             GameObjects::Particle(p) => p.draw(),
             GameObjects::Bullet(b) => b.draw(),
-        }
-    }
-    pub fn is_alive(&self) -> bool {
-        match self {
-            GameObjects::Ship(s) => s.is_alive(),
-            GameObjects::Particle(p) => p.is_alive(),
-            GameObjects::Bullet(b) => b.is_alive(),
         }
     }
 }
