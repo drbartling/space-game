@@ -1,8 +1,11 @@
+use std::f32::consts::TAU;
+
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
 #[derive(Component, Default)]
 pub struct Ship {
+    pub id: usize,
     /// Angular velocity in radians per second
     pub rotation: f32,
     /// Velocity vector in meters per second
@@ -11,6 +14,7 @@ pub struct Ship {
     pub thrust: f32,
     /// Mass in Kilograms
     pub mass: f32,
+    pub cannon_timer: Timer,
 }
 
 struct ShipControl {
@@ -20,10 +24,15 @@ struct ShipControl {
     thrust_right: bool,
     rotate_left: bool,
     rotate_right: bool,
-    _fire: bool,
+    fire: bool,
 }
 
+#[derive(Resource)]
+pub struct PlayerShip(pub usize);
+
 pub fn spawn(mut commands: Commands) {
+    let ship_id = rand::random();
+
     let shape = shapes::RegularPolygon {
         sides: 3,
         feature: shapes::RegularPolygonFeature::Radius(2.0),
@@ -46,34 +55,53 @@ pub fn spawn(mut commands: Commands) {
             }),
         ))
         .insert(Ship {
+            id: ship_id,
             thrust: 60.0,
             mass: 100.0,
+            cannon_timer: Timer::from_seconds(0.1, TimerMode::Once),
             ..Default::default()
         });
+    commands.insert_resource(PlayerShip(ship_id));
 }
 
 pub fn update(
+    mut commands: Commands,
     keys: Res<Input<KeyCode>>,
     time: Res<Time>,
     mut query: Query<(&mut Ship, &mut Transform)>,
 ) {
     let control = player_control(keys);
-    let dt = time.delta_seconds();
     for (ship, transform) in query.iter_mut() {
-        _update(ship, transform, &control, dt);
+        _update(&mut commands, ship, transform, &control, &time);
     }
 }
 
 fn _update(
+    commands: &mut Commands,
     mut ship: Mut<Ship>,
     mut transform: Mut<Transform>,
     control: &ShipControl,
-    dt: f32,
+    time: &Res<Time>,
 ) {
+    let dt = time.delta_seconds();
     let dp = ship.velocity * dt;
     transform.translation += dp.extend(0.0);
     let dr = ship.rotation * dt;
     transform.rotate_z(dr);
+
+    ship.cannon_timer.tick(time.delta());
+    if ship.cannon_timer.finished() && control.fire {
+        ship.cannon_timer.reset();
+        commands.spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::rgb(0.97, 0.97, 0.97),
+                custom_size: Some(Vec2::new(0.1, 0.1)),
+                ..default()
+            },
+            transform: *transform,
+            ..default()
+        });
+    }
 
     let mut thrust_vector = Vec2::ZERO;
     if control.thrust_forward {
@@ -97,13 +125,16 @@ fn _update(
 
     let mut rotation = 0.0;
     if control.rotate_left {
-        rotation += 1.0;
+        rotation += TAU;
     }
     if control.rotate_right {
-        rotation -= 1.0;
+        rotation -= TAU;
     }
     rotation *= dt;
     ship.rotation += rotation;
+
+    ship.rotation *= 0.1_f32.powf(dt);
+    ship.velocity *= 0.95_f32.powf(dt);
 }
 
 fn player_control(keys: Res<Input<KeyCode>>) -> ShipControl {
@@ -114,6 +145,6 @@ fn player_control(keys: Res<Input<KeyCode>>) -> ShipControl {
         thrust_right: keys.any_pressed([KeyCode::S]),
         rotate_left: keys.any_pressed([KeyCode::Left]),
         rotate_right: keys.any_pressed([KeyCode::Right]),
-        _fire: keys.any_pressed([KeyCode::Space]),
+        fire: keys.any_pressed([KeyCode::Space]),
     }
 }

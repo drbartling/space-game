@@ -8,7 +8,9 @@ edition = "2021"
 [dependencies]
 # ECS based game engine: https://bevyengine.org/
 bevy = "0.9.0"
+bevy-inspector-egui = "0.14.0"
 bevy_prototype_lyon = "0.7.1"
+rand = "0.8.5"
 
 
 [dev-dependencies]

@@ -6,6 +6,7 @@
     clippy::large_digit_groups
 )]
 use bevy::prelude::*;
+use bevy_inspector_egui::WorldInspectorPlugin;
 use bevy_prototype_lyon::prelude::*;
 
 mod camera;
@@ -22,8 +23,10 @@ fn main() {
             ..Default::default()
         }))
         .add_plugin(ShapePlugin)
+        .add_plugin(WorldInspectorPlugin::new())
         .add_startup_system(camera::setup)
         .add_startup_system(ship::spawn)
         .add_system(ship::update)
+        .add_system(camera::follow)
         .run();
 }
