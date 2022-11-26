@@ -1,40 +1,32 @@
-use std::f32::consts::PI;
+use std::f32::consts::TAU;
 
-use macroquad::prelude::*;
+use bevy::prelude::*;
 
-use crate::{game::GameObjects, screen::wrap_around};
-
+#[derive(Component, Default)]
 pub struct Particle {
-    pub position: Vec2,
     pub velocity: Vec2,
     pub wobble: f32,
     pub color: Color,
-    pub spawn_time: f64,
-    pub life_time: f64,
+    pub life_time: Timer,
 }
 
-impl Particle {
-    pub fn update(mut self, _objs: &[GameObjects]) -> Vec<GameObjects> {
-        self.position += self.velocity;
-        self.position = wrap_around(&self.position);
-        let wobble =
-            Vec2::from_angle(rand::gen_range(0.0, 2.0 * PI)) * self.wobble;
-        self.velocity += wobble;
-        self.wobble *= 0.9;
-        self.color.a =
-            1.0 - ((get_time() - self.spawn_time) / self.life_time) as f32;
-        if self.is_alive() {
-            vec![GameObjects::Particle(self)]
-        } else {
-            vec![]
+pub fn update(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut Particle, &mut Transform)>,
+) {
+    for (entity, mut particle, mut transform) in query.iter_mut() {
+        particle.life_time.tick(time.delta());
+        if particle.life_time.finished() {
+            commands.entity(entity).despawn();
         }
-    }
 
-    pub fn draw(&self) {
-        draw_circle(self.position.x, self.position.y, 1., self.color);
-    }
+        let dt = time.delta_seconds();
+        transform.translation += particle.velocity.extend(0.0) * dt;
 
-    pub fn is_alive(&self) -> bool {
-        get_time() - self.spawn_time < self.life_time
+        let wobble =
+            Vec2::from_angle(rand::random::<f32>() * TAU) * particle.wobble;
+        particle.velocity += wobble;
+        particle.wobble *= 0.05_f32.powf(dt);
     }
 }

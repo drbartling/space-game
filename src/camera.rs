@@ -8,8 +8,7 @@ pub fn setup(mut commands: Commands) {
 
 pub fn new() -> Camera2dBundle {
     let mut camera_bundle = Camera2dBundle::default();
-    camera_bundle.projection.scaling_mode = ScalingMode::FixedVertical(20.);
-    camera_bundle.transform.translation.x = 15.0;
+    camera_bundle.projection.scaling_mode = ScalingMode::FixedVertical(40.);
     camera_bundle
 }
 
@@ -32,8 +31,8 @@ pub fn follow(
         let pos = ship_transform.translation;
 
         for mut transform in camera_query.iter_mut() {
-            transform.translation.x = pos.x;
-            transform.translation.y = pos.y;
+            transform.translation.x = pos.x - ship.velocity.x / 20.0;
+            transform.translation.y = pos.y - ship.velocity.y / 20.0;
             transform.rotation = ship_transform.rotation;
         }
     }

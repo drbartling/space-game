@@ -6,15 +6,17 @@
     clippy::large_digit_groups
 )]
 use bevy::prelude::*;
-use bevy_inspector_egui::WorldInspectorPlugin;
+use bevy_inspector_egui::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
+mod bullet;
 mod camera;
+mod particle;
 mod ship;
 
 fn main() {
-    App::new()
-        .insert_resource(ClearColor(Color::BLACK))
+    let mut app = App::new();
+    app.insert_resource(ClearColor(Color::BLACK))
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             window: WindowDescriptor {
                 fit_canvas_to_parent: true,
@@ -23,10 +25,13 @@ fn main() {
             ..Default::default()
         }))
         .add_plugin(ShapePlugin)
-        .add_plugin(WorldInspectorPlugin::new())
         .add_startup_system(camera::setup)
         .add_startup_system(ship::spawn)
         .add_system(ship::update)
-        .add_system(camera::follow)
-        .run();
+        .add_system(particle::update)
+        .add_system(bullet::update)
+        .add_system(camera::follow);
+
+    app.add_plugin(WorldInspectorPlugin::new());
+    app.run()
 }
