@@ -22,6 +22,7 @@ pub struct Ship {
     pub cannon_timer: Timer,
     pub color: Color,
     pub controller: fn(&Res<Input<KeyCode>>) -> ShipControl,
+    pub radius: f32,
 }
 
 impl Default for Ship {
@@ -35,6 +36,7 @@ impl Default for Ship {
             cannon_timer: Default::default(),
             color: Default::default(),
             controller: default_controller,
+            radius: Default::default(),
         }
     }
 }
@@ -54,6 +56,7 @@ pub struct ShipControl {
 pub struct PlayerShip(pub usize);
 
 pub fn spawn(mut commands: Commands) {
+    let radius = 1.0;
     let ship_id = rand::random();
     let ship_color = Color::GREEN;
 
@@ -87,6 +90,7 @@ pub fn spawn(mut commands: Commands) {
             cannon_timer: Timer::from_seconds(0.1, TimerMode::Once),
             color: ship_color,
             controller: player_control,
+            radius,
             ..Default::default()
         });
     commands.insert_resource(PlayerShip(ship_id));
@@ -118,6 +122,7 @@ pub fn spawn(mut commands: Commands) {
             mass: 100.0,
             cannon_timer: Timer::from_seconds(0.1, TimerMode::Once),
             color: ship_color,
+            radius,
             ..Default::default()
         });
 }
