@@ -28,6 +28,7 @@ fn main() {
         .add_startup_system(camera::setup)
         .add_startup_system(ship::spawn)
         .add_system(ship::update)
+        .add_system(ship::target)
         .add_system(particle::update)
         .add_system(bullet::update)
         .add_system(camera::follow);

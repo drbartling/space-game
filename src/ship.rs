@@ -122,6 +122,7 @@ pub fn spawn(mut commands: Commands) {
             mass: 100.0,
             cannon_timer: Timer::from_seconds(0.1, TimerMode::Once),
             color: ship_color,
+            controller: hillarius,
             radius,
             ..Default::default()
         });
@@ -133,133 +134,123 @@ pub fn update(
     time: Res<Time>,
     mut query: Query<(&mut Ship, &mut Transform)>,
 ) {
-    for (ship, transform) in query.iter_mut() {
+    for (mut ship, mut transform) in query.iter_mut() {
         let control = (ship.controller)(&keys);
-        _update(&mut commands, ship, transform, &control, &time);
-    }
-}
+        let dt = time.delta_seconds();
+        let dp = ship.velocity * dt;
+        transform.translation += dp.extend(0.0);
+        let dr = ship.rotation * dt;
+        transform.rotate_z(dr);
 
-fn _update(
-    commands: &mut Commands,
-    mut ship: Mut<Ship>,
-    mut transform: Mut<Transform>,
-    control: &ShipControl,
-    time: &Res<Time>,
-) {
-    let dt = time.delta_seconds();
-    let dp = ship.velocity * dt;
-    transform.translation += dp.extend(0.0);
-    let dr = ship.rotation * dt;
-    transform.rotate_z(dr);
+        ship.cannon_timer.tick(time.delta());
+        if ship.cannon_timer.finished() && control.fire {
+            ship.cannon_timer.reset();
 
-    ship.cannon_timer.tick(time.delta());
-    if ship.cannon_timer.finished() && control.fire {
-        ship.cannon_timer.reset();
+            let rel_velocity = (transform.rotation
+                * (Vec2::Y * SHOT_SPEED).extend(0.0))
+            .truncate();
+            let mass = 1.0;
+            let recoil = -rel_velocity * mass / ship.mass;
+            ship.velocity += recoil;
+            let velocity = rel_velocity + ship.velocity;
 
-        let rel_velocity = (transform.rotation
-            * (Vec2::Y * SHOT_SPEED).extend(0.0))
-        .truncate();
-        let mass = 1.0;
-        let recoil = -rel_velocity * mass / ship.mass;
-        ship.velocity += recoil;
-        let velocity = rel_velocity + ship.velocity;
+            let b = Bullet {
+                velocity,
+                life_time: Timer::from_seconds(SHOT_LIFE, TimerMode::Once),
+                color: ship.color,
+                mass,
+            };
 
-        let b = Bullet {
-            velocity,
-            life_time: Timer::from_seconds(SHOT_LIFE, TimerMode::Once),
-            color: ship.color,
-            mass,
+            let pos = (transform.rotation * Vec2::new(0.0, 2.0).extend(0.0))
+                .truncate();
+
+            commands
+                .spawn(SpriteBundle {
+                    sprite: Sprite {
+                        color: ship.color,
+                        custom_size: Some(Vec2::new(0.1, 0.1)),
+                        ..default()
+                    },
+                    transform: Transform {
+                        translation: transform.translation + pos.extend(0.0),
+                        ..default()
+                    },
+                    ..default()
+                })
+                .insert(b);
+        }
+
+        let mut push_exhaust = |dv: Vec2, pos: Vec2| {
+            let dv = (transform.rotation * dv.extend(0.0)).truncate();
+            let pos = (transform.rotation * pos.extend(0.0)).truncate();
+            let speed = dv.length();
+            let p = Particle {
+                velocity: ship.velocity - dv * 10.0,
+                color: Color::ORANGE,
+                life_time: Timer::from_seconds(0.5, TimerMode::Once),
+                wobble: speed,
+            };
+            commands
+                .spawn(SpriteBundle {
+                    sprite: Sprite {
+                        color: Color::ORANGE,
+                        custom_size: Some(Vec2::new(0.1, 0.1)),
+                        ..default()
+                    },
+                    transform: Transform {
+                        translation: transform.translation + pos.extend(0.0),
+                        ..default()
+                    },
+                    ..default()
+                })
+                .insert(p);
         };
 
-        let pos =
-            (transform.rotation * Vec2::new(0.0, 2.0).extend(0.0)).truncate();
+        let mut thrust_vector = Vec2::ZERO;
+        if control.thrust_forward {
+            let dv = Vec2::new(0.0, 1.0);
+            let pos = Vec2::new(0.0, -1.0);
+            thrust_vector += dv;
+            push_exhaust(dv, pos);
+        }
+        if control.thrust_aft {
+            let dv = Vec2::new(0.0, -0.5);
+            let pos = Vec2::new(0.0, 2.0);
+            thrust_vector += dv;
+            push_exhaust(dv, pos);
+        }
+        if control.thrust_right {
+            let dv = Vec2::new(0.3, 0.0);
+            let pos = Vec2::new(-0.6, 0.0);
+            thrust_vector += dv;
+            push_exhaust(dv, pos);
+        }
+        if control.thrust_left {
+            let dv = Vec2::new(-0.3, 0.0);
+            let pos = Vec2::new(0.6, 0.0);
+            thrust_vector += dv;
+            push_exhaust(dv, pos);
+        }
+        thrust_vector = (transform.rotation
+            * (thrust_vector.extend(0.0) * ship.thrust))
+            .truncate();
+        let acc = thrust_vector / ship.mass;
+        let dv = acc * dt;
+        ship.velocity += dv;
 
-        commands
-            .spawn(SpriteBundle {
-                sprite: Sprite {
-                    color: ship.color,
-                    custom_size: Some(Vec2::new(0.1, 0.1)),
-                    ..default()
-                },
-                transform: Transform {
-                    translation: transform.translation + pos.extend(0.0),
-                    ..default()
-                },
-                ..default()
-            })
-            .insert(b);
-    }
+        let mut rotation = 0.0;
+        if control.rotate_left {
+            rotation += TAU;
+        }
+        if control.rotate_right {
+            rotation -= TAU;
+        }
+        rotation *= dt;
+        ship.rotation += rotation;
 
-    let mut push_exhaust = |dv: Vec2, pos: Vec2| {
-        let dv = (transform.rotation * dv.extend(0.0)).truncate();
-        let pos = (transform.rotation * pos.extend(0.0)).truncate();
-        let speed = dv.length();
-        let p = Particle {
-            velocity: ship.velocity - dv * 10.0,
-            color: Color::ORANGE,
-            life_time: Timer::from_seconds(0.5, TimerMode::Once),
-            wobble: speed,
-        };
-        commands
-            .spawn(SpriteBundle {
-                sprite: Sprite {
-                    color: Color::ORANGE,
-                    custom_size: Some(Vec2::new(0.1, 0.1)),
-                    ..default()
-                },
-                transform: Transform {
-                    translation: transform.translation + pos.extend(0.0),
-                    ..default()
-                },
-                ..default()
-            })
-            .insert(p);
-    };
-
-    let mut thrust_vector = Vec2::ZERO;
-    if control.thrust_forward {
-        let dv = Vec2::new(0.0, 1.0);
-        let pos = Vec2::new(0.0, -1.0);
-        thrust_vector += dv;
-        push_exhaust(dv, pos);
+        ship.rotation *= 0.1_f32.powf(dt);
+        ship.velocity *= 0.95_f32.powf(dt);
     }
-    if control.thrust_aft {
-        let dv = Vec2::new(0.0, -0.5);
-        let pos = Vec2::new(0.0, 2.0);
-        thrust_vector += dv;
-        push_exhaust(dv, pos);
-    }
-    if control.thrust_right {
-        let dv = Vec2::new(0.3, 0.0);
-        let pos = Vec2::new(-0.6, 0.0);
-        thrust_vector += dv;
-        push_exhaust(dv, pos);
-    }
-    if control.thrust_left {
-        let dv = Vec2::new(-0.3, 0.0);
-        let pos = Vec2::new(0.6, 0.0);
-        thrust_vector += dv;
-        push_exhaust(dv, pos);
-    }
-    thrust_vector = (transform.rotation
-        * (thrust_vector.extend(0.0) * ship.thrust))
-        .truncate();
-    let acc = thrust_vector / ship.mass;
-    let dv = acc * dt;
-    ship.velocity += dv;
-
-    let mut rotation = 0.0;
-    if control.rotate_left {
-        rotation += TAU;
-    }
-    if control.rotate_right {
-        rotation -= TAU;
-    }
-    rotation *= dt;
-    ship.rotation += rotation;
-
-    ship.rotation *= 0.1_f32.powf(dt);
-    ship.velocity *= 0.95_f32.powf(dt);
 }
 
 fn player_control(keys: &Res<Input<KeyCode>>) -> ShipControl {
@@ -274,6 +265,47 @@ fn player_control(keys: &Res<Input<KeyCode>>) -> ShipControl {
     }
 }
 
+fn hillarius(_keys: &Res<Input<KeyCode>>) -> ShipControl {
+    ShipControl {
+        thrust_forward: true,
+        fire: true,
+        rotate_right: true,
+        thrust_aft: true,
+        thrust_left: true,
+        thrust_right: true,
+        rotate_left: false,
+    }
+}
+
 fn default_controller(_keys: &Res<Input<KeyCode>>) -> ShipControl {
     ShipControl::default()
+}
+
+pub fn target(
+    player_id: Option<Res<PlayerShip>>,
+    query: Query<(&Ship, &Transform)>,
+) {
+    let id = if let Some(id) = player_id {
+        id.0
+    } else {
+        return;
+    };
+    let mut player_transform = None;
+    let mut other_transform = None;
+    for (ship, transform) in query.iter() {
+        if ship.id == id {
+            player_transform = Some(transform);
+        } else {
+            other_transform = Some(transform);
+        }
+    }
+    let player_transform = player_transform.unwrap();
+    let other_transform = other_transform.unwrap();
+
+    let dp =
+        (other_transform.translation - player_transform.translation).truncate();
+    let mut dp = (player_transform.rotation * dp.extend(0.0)).truncate();
+    dp.y *= -1.0;
+    // let dp = dp.normalize();
+    dbg!(dp);
 }

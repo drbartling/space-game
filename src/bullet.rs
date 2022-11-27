@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::ship::Ship;
 
 pub const SHOT_SPEED: f32 = 30.;
-pub const SHOT_LIFE: f32 = 1.5;
+pub const SHOT_LIFE: f32 = 5.0;
 
 #[derive(Component, Default)]
 pub struct Bullet {
@@ -42,7 +42,8 @@ pub fn update(
                 let dot2 = dp.perp_dot(dv);
                 let moment = dot1 * bullet.mass / ship.mass;
                 ship.velocity += moment;
-                let ang_moment = dot2 * bullet.mass / ship.mass;
+                let hilarity = 1000.0;
+                let ang_moment = dot2 * hilarity * bullet.mass / ship.mass;
                 ship.rotation += ang_moment;
             }
         }
