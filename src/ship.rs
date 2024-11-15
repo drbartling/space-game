@@ -1,5 +1,6 @@
 use std::f32::consts::TAU;
 
+use bevy::color::palettes::css;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -21,7 +22,7 @@ pub struct Ship {
     pub mass: f32,
     pub cannon_timer: Timer,
     pub color: Color,
-    pub controller: fn(&Res<Input<KeyCode>>) -> ShipControl,
+    pub controller: fn(&Res<ButtonInput<KeyCode>>) -> ShipControl,
     pub radius: f32,
 }
 
@@ -58,7 +59,7 @@ pub struct PlayerShip(pub usize);
 pub fn spawn(mut commands: Commands) {
     let radius = 1.0;
     let ship_id = rand::random();
-    let ship_color = Color::GREEN;
+    let ship_color = css::GREEN.into();
 
     let shape = shapes::RegularPolygon {
         sides: 3,
@@ -68,21 +69,7 @@ pub fn spawn(mut commands: Commands) {
 
     // Player ship
     commands
-        .spawn(GeometryBuilder::build_as(
-            &shape,
-            DrawMode::Stroke(StrokeMode {
-                options: StrokeOptions::default()
-                    .with_line_join(LineJoin::Round)
-                    .with_end_cap(LineCap::Round)
-                    .with_line_width(0.1),
-                color: ship_color,
-            }),
-            Transform::default().with_scale(Vec3 {
-                x: 0.5,
-                y: 1.0,
-                z: 1.0,
-            }),
-        ))
+        .spawn(GeometryBuilder::build_as(&shape))
         .insert(Ship {
             id: ship_id,
             thrust: 1000.0,
@@ -97,25 +84,9 @@ pub fn spawn(mut commands: Commands) {
 
     // Enemy ship
     let ship_id = rand::random();
-    let ship_color = Color::RED;
+    let ship_color = css::RED.into();
     commands
-        .spawn(GeometryBuilder::build_as(
-            &shape,
-            DrawMode::Stroke(StrokeMode {
-                options: StrokeOptions::default()
-                    .with_line_join(LineJoin::Round)
-                    .with_end_cap(LineCap::Round)
-                    .with_line_width(0.1),
-                color: ship_color,
-            }),
-            Transform::default()
-                .with_scale(Vec3 {
-                    x: 0.5,
-                    y: 1.0,
-                    z: 1.0,
-                })
-                .with_translation(Vec3::new(20.0, 0.0, 0.0)),
-        ))
+        .spawn(GeometryBuilder::build_as(&shape))
         .insert(Ship {
             id: ship_id,
             thrust: 1000.0,
@@ -130,7 +101,7 @@ pub fn spawn(mut commands: Commands) {
 
 pub fn update(
     mut commands: Commands,
-    keys: Res<Input<KeyCode>>,
+    keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut query: Query<(&mut Ship, &mut Transform)>,
 ) {
@@ -186,14 +157,14 @@ pub fn update(
             let speed = dv.length();
             let p = Particle {
                 velocity: ship.velocity - dv * 10.0,
-                color: Color::ORANGE,
+                color: css::ORANGE.into(),
                 life_time: Timer::from_seconds(0.5, TimerMode::Once),
                 wobble: speed,
             };
             commands
                 .spawn(SpriteBundle {
                     sprite: Sprite {
-                        color: Color::ORANGE,
+                        color: css::ORANGE.into(),
                         custom_size: Some(Vec2::new(0.1, 0.1)),
                         ..default()
                     },
@@ -253,19 +224,19 @@ pub fn update(
     }
 }
 
-fn player_control(keys: &Res<Input<KeyCode>>) -> ShipControl {
+fn player_control(keys: &Res<ButtonInput<KeyCode>>) -> ShipControl {
     ShipControl {
-        thrust_forward: keys.any_pressed([KeyCode::D, KeyCode::Up]),
-        thrust_aft: keys.any_pressed([KeyCode::E, KeyCode::Down]),
-        thrust_left: keys.any_pressed([KeyCode::F]),
-        thrust_right: keys.any_pressed([KeyCode::S]),
-        rotate_left: keys.any_pressed([KeyCode::Left]),
-        rotate_right: keys.any_pressed([KeyCode::Right]),
+        thrust_forward: keys.any_pressed([KeyCode::KeyD, KeyCode::ArrowUp]),
+        thrust_aft: keys.any_pressed([KeyCode::KeyE, KeyCode::ArrowDown]),
+        thrust_left: keys.any_pressed([KeyCode::KeyF]),
+        thrust_right: keys.any_pressed([KeyCode::KeyS]),
+        rotate_left: keys.any_pressed([KeyCode::ArrowLeft]),
+        rotate_right: keys.any_pressed([KeyCode::ArrowRight]),
         fire: keys.any_pressed([KeyCode::Space]),
     }
 }
 
-fn hillarius(_keys: &Res<Input<KeyCode>>) -> ShipControl {
+fn hillarius(_keys: &Res<ButtonInput<KeyCode>>) -> ShipControl {
     ShipControl {
         thrust_forward: true,
         fire: true,
@@ -277,7 +248,7 @@ fn hillarius(_keys: &Res<Input<KeyCode>>) -> ShipControl {
     }
 }
 
-fn default_controller(_keys: &Res<Input<KeyCode>>) -> ShipControl {
+fn default_controller(_keys: &Res<ButtonInput<KeyCode>>) -> ShipControl {
     ShipControl::default()
 }
 
@@ -299,13 +270,16 @@ pub fn target(
             other_transform = Some(transform);
         }
     }
-    let player_transform = player_transform.unwrap();
-    let other_transform = other_transform.unwrap();
-
-    let dp =
-        (other_transform.translation - player_transform.translation).truncate();
-    let mut dp = (player_transform.rotation * dp.extend(0.0)).truncate();
-    dp.y *= -1.0;
-    // let dp = dp.normalize();
-    dbg!(dp);
+    if let Some(player_transform) = player_transform {
+        if let Some(other_transform) = other_transform {
+            let dp = (other_transform.translation
+                - player_transform.translation)
+                .truncate();
+            let mut dp =
+                (player_transform.rotation * dp.extend(0.0)).truncate();
+            dp.y *= -1.0;
+            // let dp = dp.normalize();
+            dbg!(dp);
+        }
+    }
 }
